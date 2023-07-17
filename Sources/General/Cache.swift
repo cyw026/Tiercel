@@ -189,8 +189,44 @@ extension Cache {
 
 // MARK: - retrieve
 extension Cache {
+    internal func restorePreviousDownloads() {
+        guard self.identifier == "music" else {
+            return
+        }
+        let cacheName = "com.Daniels.Tiercel.Cache.\(identifier)"
+        let diskCachePath = Cache.defaultDiskCachePathClosure(cacheName)
+        let path = (diskCachePath as NSString).appendingPathComponent("Downloads")
+        if fileManager.fileExists(atPath: path) {
+            if let files = fileManager.subpaths(atPath: path) {
+                for file in files
+                {
+                    let atPath = (path as NSString).appendingPathComponent(file)
+                    let toPath = (downloadPath as NSString).appendingPathComponent(file)
+                    do {
+                        if !fileManager.fileExists(atPath: toPath) {
+                            try fileManager.moveItem(atPath: atPath, toPath: toPath)
+                        }
+                    } catch {
+                        self.manager?.log(.error("store file failed",
+                                                 error: TiercelError.cacheError(reason: .cannotMoveItem(atPath: atPath, toPath: toPath, error: error))))
+                    }
+                }
+            }
+            // 删除旧版Downloads目录
+            
+            do {
+                try self.fileManager.removeItem(atPath: path)
+            } catch {
+                self.manager?.log(.error("remove file failed",
+                                         error: TiercelError.cacheError(reason: .cannotRemoveItem(path: path,
+                                                                                                  error: error))))
+            }
+        }
+    }
+    
     internal func retrieveAllTasks() -> [DownloadTask] {
         return ioQueue.sync {
+            restorePreviousDownloads()
             let path = (downloadPath as NSString).appendingPathComponent("\(identifier)_Tasks.plist")
             if fileManager.fileExists(atPath: path) {
                 do {
